@@ -12,11 +12,10 @@ public final class ReelTimeApp {
     private final BookingService bookings = new BookingService(new SimulatedPaymentGateway(), new DemandPricingStrategy());
     private final JComboBox<Movie> moviePicker = new JComboBox<>();
     private final JComboBox<Show> showPicker = new JComboBox<>();
-    private final JPanel seatsPanel = new JPanel(new GridLayout(7, 12, 6, 6));
+    private final Seat3DPanel seatsPanel = new Seat3DPanel(this::toggleSeat);
     private final JPanel historyPanel = new JPanel();
     private final JLabel totalLabel = new JLabel("Total: ₹0");
     private final Set<String> selectedSeats = new LinkedHashSet<>();
-    private final Map<String, JButton> seatButtons = new HashMap<>();
     private final Map<String, JCheckBox> comboBoxes = new LinkedHashMap<>();
 
     public static void main(String[] args) { SwingUtilities.invokeLater(() -> new ReelTimeApp().show()); }
@@ -40,7 +39,9 @@ public final class ReelTimeApp {
         moviePicker.setBackground(new Color(31, 38, 54)); moviePicker.setForeground(Color.WHITE);
         showPicker.setBackground(new Color(31, 38, 54)); showPicker.setForeground(Color.WHITE);
         moviePicker.addActionListener(e -> refreshShows()); showPicker.addActionListener(e -> { selectedSeats.clear(); refreshSeatGrid(); updateTotal(); });
-        header.add(heading); header.add(moviePicker); header.add(showPicker); panel.add(header, BorderLayout.NORTH);
+        JButton viewButton = new JButton("Switch to 2D seat map"); viewButton.setBackground(new Color(31, 38, 54)); viewButton.setForeground(Color.WHITE); viewButton.setFocusPainted(false);
+        viewButton.addActionListener(e -> { boolean next = !seatsPanel.isPerspective(); seatsPanel.setPerspective(next); viewButton.setText(next ? "Switch to 2D seat map" : "Switch to 3D seat view"); });
+        header.add(heading); header.add(moviePicker); header.add(showPicker); header.add(viewButton); panel.add(header, BorderLayout.NORTH);
         seatsPanel.setOpaque(false); seatsPanel.setBorder(new EmptyBorder(22, 10, 18, 10)); panel.add(seatsPanel, BorderLayout.CENTER);
         JPanel foot = new JPanel(new FlowLayout(FlowLayout.CENTER, 18, 2)); foot.setOpaque(false);
         foot.add(label("● Available", 11, new Color(170, 181, 200))); foot.add(label("● Selected", 11, MINT)); foot.add(label("● Sold", 11, new Color(100, 108, 126)));
@@ -79,20 +80,16 @@ public final class ReelTimeApp {
     }
 
     private void refreshSeatGrid() {
-        seatsPanel.removeAll(); seatButtons.clear(); Show show = (Show) showPicker.getSelectedItem();
-        if (show == null) { seatsPanel.revalidate(); seatsPanel.repaint(); return; }
-        Map<String, SeatState> state = bookings.inventoryFor(show).snapshot();
-        for (char row='A'; row<='G'; row++) for (int number=1; number<=12; number++) {
-            String id = SeatInventory.label(row, number); SeatState seatState = state.get(id);
-            JButton button = new JButton(Integer.toString(number)); button.setMargin(new Insets(2, 2, 2, 2)); button.setFont(new Font("SansSerif", Font.PLAIN, 10));
-            boolean unavailable = seatState instanceof SeatState.Sold || seatState instanceof SeatState.Held;
-            button.setEnabled(!unavailable); button.setBackground(unavailable ? new Color(45, 50, 64) : selectedSeats.contains(id) ? MINT : new Color(31, 38, 54));
-            button.setForeground(selectedSeats.contains(id) ? BG : unavailable ? new Color(105, 112, 127) : Color.WHITE);
-            button.setToolTipText(id + " · " + SeatCategory.forRow(row).label());
-            button.addActionListener(e -> { if (selectedSeats.contains(id)) selectedSeats.remove(id); else if (selectedSeats.size() < 6) selectedSeats.add(id); else { JOptionPane.showMessageDialog(null, "You can choose up to 6 seats."); return; } refreshSeatGrid(); updateTotal(); });
-            seatButtons.put(id, button); seatsPanel.add(button);
-        }
-        seatsPanel.revalidate(); seatsPanel.repaint();
+        Show show = (Show) showPicker.getSelectedItem();
+        if (show == null) { seatsPanel.setSeatData(Map.of(), selectedSeats); return; }
+        seatsPanel.setSeatData(bookings.inventoryFor(show).snapshot(), selectedSeats);
+    }
+
+    private void toggleSeat(String id) {
+        if (selectedSeats.contains(id)) selectedSeats.remove(id);
+        else if (selectedSeats.size() < 6) selectedSeats.add(id);
+        else { JOptionPane.showMessageDialog(null, "You can choose up to 6 seats."); return; }
+        refreshSeatGrid(); updateTotal();
     }
 
     private void updateTotal() {
@@ -126,3 +123,4 @@ public final class ReelTimeApp {
     private static JPanel panel() { JPanel panel = new JPanel(); panel.setBackground(PANEL); panel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(38, 46, 63)), new EmptyBorder(18, 18, 18, 18))); return panel; }
     private static JLabel label(String text, int size, Color color) { JLabel label = new JLabel(text); label.setFont(new Font("SansSerif", Font.PLAIN, size)); label.setForeground(color); return label; }
 }
+
